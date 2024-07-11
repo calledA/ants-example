@@ -1,6 +1,6 @@
 <p align="center">
 <img src="https://raw.githubusercontent.com/panjf2000/logos/master/ants/logo.png" />
-<b>A goroutine pool for Go</b>
+<b>Go 语言的 goroutine 池</b>
 <br/><br/>
 <a title="Build Status" target="_blank" href="https://github.com/panjf2000/ants/actions?query=workflow%3ATests"><img src="https://img.shields.io/github/actions/workflow/status/panjf2000/ants/test.yml?branch=master&style=flat-square&logo=github-actions" /></a>
 <a title="Codecov" target="_blank" href="https://codecov.io/gh/panjf2000/ants"><img src="https://img.shields.io/codecov/c/github/panjf2000/ants?style=flat-square&logo=codecov" /></a>
@@ -13,30 +13,30 @@
 <a title="Mentioned in Awesome Go" target="_blank" href="https://github.com/avelino/awesome-go#goroutines"><img src="https://awesome.re/mentioned-badge-flat.svg" /></a>
 </p>
 
-English | [中文](README_ZH.md)
+[英文](README.md) | 中文
 
-## 📖 Introduction
+## 📖 简介
 
-Library `ants` implements a goroutine pool with fixed capacity, managing and recycling a massive number of goroutines, allowing developers to limit the number of goroutines in your concurrent programs.
+`ants`是一个高性能的 goroutine 池，实现了对大规模 goroutine 的调度管理、goroutine 复用，允许使用者在开发并发程序的时候限制 goroutine 数量，复用资源，达到更高效执行任务的效果。
 
-## 🚀 Features:
+## 🚀 功能：
 
-- Managing and recycling a massive number of goroutines automatically
-- Purging overdue goroutines periodically
-- Abundant APIs: submitting tasks, getting the number of running goroutines, tuning capacity of pool dynamically, releasing pool, rebooting pool
-- Handle panic gracefully to prevent programs from crash
-- Efficient in memory usage and it even achieves [higher performance](#-performance-summary) than unlimited goroutines in Golang
-- Nonblocking mechanism
+- 自动调度海量的 goroutines，复用 goroutines
+- 定期清理过期的 goroutines，进一步节省资源
+- 提供了大量有用的接口：任务提交、获取运行中的 goroutine 数量、动态调整 Pool 大小、释放 Pool、重启 Pool
+- 优雅处理 panic，防止程序崩溃
+- 资源复用，极大节省内存使用量；在大规模批量并发任务场景下比原生 goroutine 并发具有[更高的性能](#-性能小结)
+- 非阻塞机制
 
-## 💡 How `ants` works
+## 💡 `ants` 是如何运行的
 
-### Flow Diagram
+### 流程图
 
 <p align="center">
-<img width="1011" alt="ants-flowchart-en" src="https://user-images.githubusercontent.com/7496278/66396509-7b42e700-ea0c-11e9-8612-b71a4b734683.png">
+<img width="845" alt="ants-flowchart-cn" src="https://user-images.githubusercontent.com/7496278/66396519-7ed66e00-ea0c-11e9-9c1a-5ca54bbd61eb.png">
 </p>
 
-### Activity Diagrams
+### 动态图
 
 ![](https://raw.githubusercontent.com/panjf2000/illustrations/master/go/ants-pool-1.png)
 
@@ -46,22 +46,22 @@ Library `ants` implements a goroutine pool with fixed capacity, managing and rec
 
 ![](https://raw.githubusercontent.com/panjf2000/illustrations/master/go/ants-pool-4.png)
 
-## 🧰 How to install
+## 🧰 安装
 
-### For `ants` v1
+### 使用 `ants` v1 版本:
 
 ``` powershell
 go get -u github.com/panjf2000/ants
 ```
 
-### For `ants` v2 (with GO111MODULE=on)
+### 使用 `ants` v2 版本 (开启 GO111MODULE=on):
 
 ```powershell
 go get -u github.com/panjf2000/ants/v2
 ```
 
-## 🛠 How to use
-Just take a imagination that your program starts a massive number of goroutines, resulting in a huge consumption of memory. To mitigate that kind of situation, all you need to do is to import `ants` package and submit all your tasks to a default pool with fixed capacity, activated when package `ants` is imported:
+## 🛠 使用
+写 go 并发程序的时候如果程序会启动大量的 goroutine ，势必会消耗大量的系统资源（内存，CPU），通过使用 `ants`，可以实例化一个 goroutine 池，复用 goroutine ，节省资源，提升性能：
 
 ``` go
 package main
@@ -125,7 +125,7 @@ func main() {
 }
 ```
 
-###  Functional options for ants pool
+### Pool 配置
 
 ```go
 // Option represents the optional function.
@@ -209,131 +209,132 @@ func WithLogger(logger Logger) Option {
 }
 ```
 
-`ants.Options`contains all optional configurations of ants pool, which allows you to customize the goroutine pool by invoking option functions to set up each configuration in `NewPool`/`NewPoolWithFunc`method.
+通过在调用`NewPool`/`NewPoolWithFunc`之时使用各种 optional function，可以设置`ants.Options`中各个配置项的值，然后用它来定制化 goroutine pool.
 
-### Customize limited pool
 
-`ants` also supports customizing the capacity of pool. You can invoke the `NewPool` method to instantiate a pool with a given capacity, as following:
+### 自定义池
+`ants`支持实例化使用者自己的一个 Pool ，指定具体的池容量；通过调用 `NewPool` 方法可以实例化一个新的带有指定容量的 Pool ，如下：
 
 ``` go
 // Set 10000 the size of goroutine pool
 p, _ := ants.NewPool(10000)
 ```
 
-### Submit tasks
-Tasks can be submitted by calling `ants.Submit(func())`
+### 任务提交
+
+提交任务通过调用 `ants.Submit(func())`方法：
 ```go
 ants.Submit(func(){})
 ```
 
-### Tune pool capacity in runtime
-You can tune the capacity of  `ants` pool in runtime with `Tune(int)`:
+### 动态调整 goroutine 池容量
+需要动态调整 goroutine 池容量可以通过调用`Tune(int)`：
 
 ``` go
 pool.Tune(1000) // Tune its capacity to 1000
 pool.Tune(100000) // Tune its capacity to 100000
 ```
 
-Don't worry about the synchronous problems in this case, the method here is thread-safe (or should be called goroutine-safe).
+该方法是线程安全的。
 
-### Pre-malloc goroutine queue in pool
+### 预先分配 goroutine 队列内存
 
-`ants` allows you to pre-allocate memory of goroutine queue in pool, which may get a performance enhancement under some special certain circumstances such as the scenario that requires a pool with ultra-large capacity, meanwhile each task in goroutine lasts for a long time, in this case, pre-mallocing will reduce a lot of memory allocation in goroutine queue.
+`ants`允许你预先把整个池的容量分配内存， 这个功能可以在某些特定的场景下提高 goroutine 池的性能。比如， 有一个场景需要一个超大容量的池，而且每个 goroutine 里面的任务都是耗时任务，这种情况下，预先分配 goroutine 队列内存将会减少不必要的内存重新分配。
 
 ```go
-// ants will pre-malloc the whole capacity of pool when you invoke this method
+// ants will pre-malloc the whole capacity of pool when you invoke this function
 p, _ := ants.NewPool(100000, ants.WithPreAlloc(true))
 ```
 
-### Release Pool
+### 释放 Pool
 
 ```go
 pool.Release()
 ```
 
-### Reboot Pool
+### 重启 Pool
 
 ```go
-// A pool that has been released can be still used once you invoke the Reboot().
+// 只要调用 Reboot() 方法，就可以重新激活一个之前已经被销毁掉的池，并且投入使用。
 pool.Reboot()
 ```
 
-## ⚙️ About sequence
+## ⚙️ 关于任务执行顺序
 
-All tasks submitted to `ants` pool will not be guaranteed to be addressed in order, because those tasks scatter among a series of concurrent workers, thus those tasks would be executed concurrently.
+`ants` 并不保证提交的任务被执行的顺序，执行的顺序也不是和提交的顺序保持一致，因为在 `ants` 是并发地处理所有提交的任务，提交的任务会被分派到正在并发运行的 workers 上去，因此那些任务将会被并发且无序地被执行。
 
 ## 🧲 Benchmarks
 
 <div align="center"><img src="https://user-images.githubusercontent.com/7496278/51515466-c7ce9e00-1e4e-11e9-89c4-bd3785b3c667.png"/></div>
- In this benchmark result, the first and second benchmarks performed test cases with 1M tasks and the rest of benchmarks performed test cases with 10M tasks, both in unlimited goroutines and `ants` pool, and the capacity of this `ants` goroutine-pool was limited to 50K.
+上图中的前两个 benchmark 测试结果是基于100w 任务量的条件，剩下的几个是基于 1000w 任务量的测试结果，`ants` 的默认池容量是 5w。
 
-- BenchmarkGoroutine-4 represents the benchmarks with unlimited goroutines in golang.
+- BenchmarkGoroutine-4 代表原生 goroutine
 
-- BenchmarkPoolGroutine-4 represents the benchmarks with a `ants` pool.
+- BenchmarkPoolGroutine-4 代表使用 goroutine 池 `ants`
 
 ### Benchmarks with Pool 
 
 ![](https://user-images.githubusercontent.com/7496278/51515499-f187c500-1e4e-11e9-80e5-3df8f94fa70f.png)
 
-In above benchmark result, the first and second benchmarks performed test cases with 1M tasks and the rest of benchmarks performed test cases with 10M tasks, both in unlimited goroutines and `ants` pool, and the capacity of this `ants` goroutine-pool was limited to 50K.
-
-**As you can see, `ants` performs 2 times faster than goroutines without pool (10M tasks) and it only consumes half the memory comparing with goroutines without pool. (both in 1M and 10M tasks)**
+**这里为了模拟大规模 goroutine 的场景，两次测试的并发次数分别是 100w 和 1000w，前两个测试分别是执行 100w 个并发任务不使用 Pool 和使用了`ants`的 Goroutine Pool 的性能，后两个则是 1000w 个任务下的表现，可以直观的看出在执行速度和内存使用上，`ants`的 Pool 都占有明显的优势。100w 的任务量，使用`ants`，执行速度与原生 goroutine 相当甚至略快，但只实际使用了不到 5w 个 goroutine 完成了全部任务，且内存消耗仅为原生并发的 40%；而当任务量达到 1000w，优势则更加明显了：用了 70w 左右的 goroutine 完成全部任务，执行速度比原生 goroutine 提高了 100%，且内存消耗依旧保持在不使用 Pool 的 40% 左右。**
 
 ### Benchmarks with PoolWithFunc
 
 ![](https://user-images.githubusercontent.com/7496278/51515565-1e3bdc80-1e4f-11e9-8a08-452ab91d117e.png)
 
-### Throughput (it is suitable for scenarios where tasks are submitted asynchronously without waiting for the final results) 
+**因为`PoolWithFunc`这个 Pool 只绑定一个任务函数，也即所有任务都是运行同一个函数，所以相较于`Pool`对原生 goroutine 在执行速度和内存消耗的优势更大，上面的结果可以看出，执行速度可以达到原生 goroutine 的 300%，而内存消耗的优势已经达到了两位数的差距，原生 goroutine 的内存消耗达到了`ants`的35倍且原生 goroutine 的每次执行的内存分配次数也达到了`ants`45倍，1000w 的任务量，`ants`的初始分配容量是 5w，因此它完成了所有的任务依旧只使用了 5w 个 goroutine！事实上，`ants`的 Goroutine Pool 的容量是可以自定义的，也就是说使用者可以根据不同场景对这个参数进行调优直至达到最高性能。**
 
-#### 100K tasks
+### 吞吐量测试（适用于那种只管提交异步任务而无须关心结果的场景）
+
+#### 10w 任务量
 
 ![](https://user-images.githubusercontent.com/7496278/51515590-36abf700-1e4f-11e9-91e4-7bd3dcb5f4a5.png)
 
-#### 1M tasks
+#### 100w 任务量
 
 ![](https://user-images.githubusercontent.com/7496278/51515596-44617c80-1e4f-11e9-89e3-01e19d2979a1.png)
 
-#### 10M tasks
+#### 1000w 任务量
 
 ![](https://user-images.githubusercontent.com/7496278/52987732-537c2000-3437-11e9-86a6-177f00d7a1d6.png)
 
-## 📊 Performance Summary
+## 📊 性能小结
 
 ![](https://user-images.githubusercontent.com/7496278/63449727-3ae6d400-c473-11e9-81e3-8b3280d8288a.gif)
 
-**In conclusion, `ants` performs 2~6 times faster than goroutines without a pool and the memory consumption is reduced by 10 to 20 times.**
+**从该 demo 测试吞吐性能对比可以看出，使用`ants`的吞吐性能相较于原生 goroutine 可以保持在 2-6 倍的性能压制，而内存消耗则可以达到 10-20 倍的节省优势。** 
 
-## 👏 Contributors
+## 👏 贡献者
 
-Please read our [Contributing Guidelines](CONTRIBUTING.md) before opening a PR and thank you to all the developers who already made contributions to `ants`!
+请在提 PR 之前仔细阅读 [Contributing Guidelines](CONTRIBUTING.md)，感谢那些为 `ants` 贡献过代码的开发者！
 
 [![](https://opencollective.com/ants/contributors.svg?width=890&button=false)](https://github.com/panjf2000/ants/graphs/contributors)
 
-## 📄 License
+## 📄 证书
 
-Source code in `ants` is available under the [MIT License](/LICENSE).
+`ants` 的源码允许用户在遵循 [MIT 开源证书](/LICENSE) 规则的前提下使用。
 
-## 📚 Relevant Articles
+## 📚 相关文章
 
 -  [Goroutine 并发调度模型深度解析之手撸一个高性能 goroutine 池](https://taohuawu.club/high-performance-implementation-of-goroutine-pool)
 -  [Visually Understanding Worker Pool](https://medium.com/coinmonks/visually-understanding-worker-pool-48a83b7fc1f5)
 -  [The Case For A Go Worker Pool](https://brandur.org/go-worker-pool)
 -  [Go Concurrency - GoRoutines, Worker Pools and Throttling Made Simple](https://twin.sh/articles/39/go-concurrency-goroutines-worker-pools-and-throttling-made-simple)
 
-## 🖥 Use cases
+## 🖥 用户案例
 
-### business companies
+### 商业公司
 
-The following companies/organizations use `ants` in production.
+以下公司/组织在生产环境上使用了 `ants`。
 
-<a href="https://www.tencent.com"><img src="http://img.taohuawu.club/gallery/tencent_logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.bytedance.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/ByteDance_Logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://tieba.baidu.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/baidu-tieba-logo.png" width="300" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.sina.com.cn/" target="_blank"><img src="http://img.taohuawu.club/gallery/sina-logo.png" width="200" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.163.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/netease-logo.png" width="150" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.tencentmusic.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/tencent-music-logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.futuhk.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/futu-logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.shopify.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/shopify-logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.wechat.com/en/" target="_blank"><img src="http://img.taohuawu.club/gallery/wechat-logo.png" width="250" align="middle"/></a><a href="https://www.baidu.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/baidu-mobile.png" width="250" align="middle"/></a>
+<a href="https://www.tencent.com"><img src="http://img.taohuawu.club/gallery/tencent_logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.bytedance.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/ByteDance_Logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://tieba.baidu.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/baidu-tieba-logo.png" width="300" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.sina.com.cn/" target="_blank"><img src="http://img.taohuawu.club/gallery/sina-logo.png" width="200" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.163.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/netease-logo.png" width="150" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.tencentmusic.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/tencent-music-logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.futuhk.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/futu-logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://www.shopify.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/shopify-logo.png" width="250" align="middle"/></a>&nbsp;&nbsp;<a href="https://weixin.qq.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/wechat-logo.png" width="250" align="middle"/></a><a href="https://www.baidu.com/" target="_blank"><img src="http://img.taohuawu.club/gallery/baidu-mobile.png" width="250" align="middle"/></a>
 
-### open-source software
+### 开源软件
 
-- [gnet](https://github.com/panjf2000/gnet):  A high-performance, lightweight, non-blocking, event-driven networking framework written in pure Go.
+- [gnet](https://github.com/panjf2000/gnet):  gnet 是一个高性能、轻量级、非阻塞的事件驱动 Go 网络框架。
 - [nps](https://github.com/ehang-io/nps): A lightweight, high-performance, powerful intranet penetration proxy server, with a powerful web management terminal.
 - [milvus](https://github.com/milvus-io/milvus): An open-source vector database for scalable similarity search and AI applications.
-- [siyuan](https://github.com/siyuan-note/siyuan): SiYuan is a local-first personal knowledge management system that supports complete offline use, as well as end-to-end encrypted synchronization.
+- [siyuan](https://github.com/siyuan-note/siyuan): 思源笔记是一款本地优先的个人知识管理系统，支持完全离线使用，同时也支持端到端加密同步。
 - [osmedeus](https://github.com/j3ssie/osmedeus): A Workflow Engine for Offensive Security.
 - [jitsu](https://github.com/jitsucom/jitsu): An open-source Segment alternative. Fully-scriptable data ingestion engine for modern data teams. Set-up a real-time data pipeline in minutes, not days.
 - [triangula](https://github.com/RH12503/triangula): Generate high-quality triangulated and polygonal art from images.
@@ -342,45 +343,45 @@ The following companies/organizations use `ants` in production.
 - [jaeles](https://github.com/jaeles-project/jaeles): The Swiss Army knife for automated Web Application Testing.
 - [devlake](https://github.com/apache/incubator-devlake): The open-source dev data platform & dashboard for your DevOps tools.
 
-#### All use cases:
+#### 所有案例:
 
 - [Repositories that depend on ants/v2](https://github.com/panjf2000/ants/network/dependents?package_id=UGFja2FnZS0yMjY2ODgxMjg2)
 
 - [Repositories that depend on ants/v1](https://github.com/panjf2000/ants/network/dependents?package_id=UGFja2FnZS0yMjY0ODMzNjEw)
 
-If you have `ants` integrated into projects, feel free to open a pull request refreshing this list of use cases.
+如果你的项目也在使用 `ants`，欢迎给我提 Pull Request 来更新这份用户案例列表。
 
-## 🔋 JetBrains OS licenses
+## 🔋 JetBrains 开源证书支持
 
-`ants` had been being developed with GoLand under the **free JetBrains Open Source license(s)** granted by JetBrains s.r.o., hence I would like to express my thanks here.
+`ants` 项目一直以来都是在 JetBrains 公司旗下的 GoLand 集成开发环境中进行开发，基于 **free JetBrains Open Source license(s)** 正版免费授权，在此表达我的谢意。
 
 <a href="https://www.jetbrains.com/?from=ants" target="_blank"><img src="https://raw.githubusercontent.com/panjf2000/illustrations/master/jetbrains/jetbrains-variant-4.png" width="250" align="middle"/></a>
 
-## 💰 Backers
+## 💰 支持
 
-Support us with a monthly donation and help us continue our activities.
+如果有意向，可以通过每个月定量的少许捐赠来支持这个项目。
 
 <a href="https://opencollective.com/ants#backers" target="_blank"><img src="https://opencollective.com/ants/backers.svg"></a>
 
-## 💎 Sponsors
+## 💎 赞助
 
-Become a bronze sponsor with a monthly donation of $10 and get your logo on our README on Github.
+每月定量捐赠 10 刀即可成为本项目的赞助者，届时您的 logo 或者 link 可以展示在本项目的 README 上。
 
 <a href="https://opencollective.com/ants#sponsors" target="_blank"><img src="https://opencollective.com/ants/sponsors.svg"></a>
 
-## ☕️ Buy me a coffee
+## ☕️ 打赏
 
-> Please be sure to leave your name, GitHub account or other social media accounts when you donate by the following means so that I can add it to the list of donors as a token of my appreciation.
+> 当您通过以下方式进行捐赠时，请务必留下姓名、GitHub 账号或其他社交媒体账号，以便我将其添加到捐赠者名单中，以表谢意。
 
 <img src="https://raw.githubusercontent.com/panjf2000/illustrations/master/payments/WeChatPay.JPG" width="250" align="middle"/>&nbsp;&nbsp;
 <img src="https://raw.githubusercontent.com/panjf2000/illustrations/master/payments/AliPay.JPG" width="250" align="middle"/>&nbsp;&nbsp;
 <a href="https://www.paypal.me/R136a1X" target="_blank"><img src="https://raw.githubusercontent.com/panjf2000/illustrations/master/payments/PayPal.JPG" width="250" align="middle"/></a>&nbsp;&nbsp;
 
-## 💵 Patrons
+## 资助者
 
 <a target="_blank" href="https://github.com/patrick-othmer"><img src="https://avatars1.githubusercontent.com/u/8964313" width="100" alt="Patrick Othmer" /></a>&nbsp;<a target="_blank" href="https://github.com/panjf2000/ants"><img src="https://avatars2.githubusercontent.com/u/50285334" width="100" alt="Jimmy" /></a>&nbsp;<a target="_blank" href="https://github.com/cafra"><img src="https://avatars0.githubusercontent.com/u/13758306" width="100" alt="ChenZhen" /></a>&nbsp;<a target="_blank" href="https://github.com/yangwenmai"><img src="https://avatars0.githubusercontent.com/u/1710912" width="100" alt="Mai Yang" /></a>&nbsp;<a target="_blank" href="https://github.com/BeijingWks"><img src="https://avatars3.githubusercontent.com/u/33656339" width="100" alt="王开帅" /></a>&nbsp;<a target="_blank" href="https://github.com/refs"><img src="https://avatars3.githubusercontent.com/u/6905948" width="100" alt="Unger Alejandro" /></a>&nbsp;<a target="_blank" href="https://github.com/Wuvist"><img src="https://avatars.githubusercontent.com/u/657796" width="100" alt="Weng Wei" /></a>
 
-## 🔋 Sponsorship
+## 🔋 赞助商
 
 <p>
   <a href="https://www.digitalocean.com/">
