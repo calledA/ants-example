@@ -9,55 +9,60 @@ import (
 	syncx "github.com/panjf2000/ants/v2/internal/sync"
 )
 
-// PoolWithFunc accepts the tasks from client,
-// it limits the total of goroutines to a given number by recycling goroutines.
+// pool结构（携带poolFunc）
 type PoolWithFunc struct {
-	// capacity of the pool.
+	// pool的容量，负数代表是无限容量，避免嵌套使用pool
 	capacity int32
 
-	// running is the number of the currently running goroutines.
+	// 当前running的goroutine
 	running int32
 
-	// lock for protecting the worker queue.
+	// worker的锁
 	lock sync.Locker
 
-	// workers is a slice that store the available workers.
+	// 存储可用worker
 	workers workerQueue
 
-	// state is used to notice the pool to closed itself.
+	// 用于通知关闭pool
 	state int32
 
-	// cond for waiting to get an idle worker.
+	// 等待获取空闲的worker
 	cond *sync.Cond
 
 	// poolFunc is the function for processing tasks.
 	poolFunc func(interface{})
 
-	// workerCache speeds up the obtainment of a usable worker in function:retrieveWorker.
+	// retrieveWorker获取worker的缓存
 	workerCache sync.Pool
 
-	// waiting is the number of the goroutines already been blocked on pool.Invoke(), protected by pool.lock
+	// pool.Submit()提交的阻塞的goroutine
 	waiting int32
 
+	// 定期清理worker
 	purgeDone int32
 	stopPurge context.CancelFunc
 
+	// 定期更新当前时间
 	ticktockDone int32
 	stopTicktock context.CancelFunc
 
+	// 记录执行时间
 	now atomic.Value
 
+	// options配置
 	options *Options
 }
 
-// purgeStaleWorkers clears stale workers periodically, it runs in an individual goroutine, as a scavenger.
+// 定期清理worker，作为goroutine运行
 func (p *PoolWithFunc) purgeStaleWorkers(ctx context.Context) {
+	// 通过options.ExpiryDuration设置的间隔时间进行清理worker
 	ticker := time.NewTicker(p.options.ExpiryDuration)
 	defer func() {
 		ticker.Stop()
 		atomic.StoreInt32(&p.purgeDone, 1)
 	}()
 
+	// 阻塞channel
 	for {
 		select {
 		case <-ctx.Done():
@@ -69,30 +74,25 @@ func (p *PoolWithFunc) purgeStaleWorkers(ctx context.Context) {
 			break
 		}
 
+		// 找到过期的worker
 		p.lock.Lock()
 		staleWorkers := p.workers.refresh(p.options.ExpiryDuration)
 		p.lock.Unlock()
 
-		// Notify obsolete workers to stop.
-		// This notification must be outside the p.lock, since w.task
-		// may be blocking and may consume a lot of time if many workers
-		// are located on non-local CPUs.
+		// 停止过期的worker，此操作在p.lock之外，因为很多worker在非本地的CPU。使用w.task阻塞会浪费很多时间
 		for i := range staleWorkers {
 			staleWorkers[i].finish()
 			staleWorkers[i] = nil
 		}
 
-		// There might be a situation where all workers have been cleaned up(no worker is running),
-		// or another case where the pool capacity has been Tuned up,
-		// while some invokers still get stuck in "p.cond.Wait()",
-		// then it ought to wake all those invokers.
+		// 当所有worker都被清理（没有worker在running）或者pool的容量调整，需要唤醒p.cond.Wait()阻塞的所有worker
 		if p.Running() == 0 || (p.Waiting() > 0 && p.Free() > 0) {
 			p.cond.Broadcast()
 		}
 	}
 }
 
-// ticktock is a goroutine that updates the current time in the pool regularly.
+// 定期更新pool当前时间的goroutine
 func (p *PoolWithFunc) ticktock(ctx context.Context) {
 	ticker := time.NewTicker(nowTimeUpdateInterval)
 	defer func() {
@@ -100,6 +100,7 @@ func (p *PoolWithFunc) ticktock(ctx context.Context) {
 		atomic.StoreInt32(&p.ticktockDone, 1)
 	}()
 
+	// 阻塞channel
 	for {
 		select {
 		case <-ctx.Done():
@@ -111,21 +112,24 @@ func (p *PoolWithFunc) ticktock(ctx context.Context) {
 			break
 		}
 
+		// 更新当前时间
 		p.now.Store(time.Now())
 	}
 }
 
+// 启动purgeStaleWorkers协程
 func (p *PoolWithFunc) goPurge() {
 	if p.options.DisablePurge {
 		return
 	}
 
-	// Start a goroutine to clean up expired workers periodically.
+	// 启动协程定时清除过期的worker
 	var ctx context.Context
 	ctx, p.stopPurge = context.WithCancel(context.Background())
 	go p.purgeStaleWorkers(ctx)
 }
 
+// 启动ticktock协程
 func (p *PoolWithFunc) goTicktock() {
 	p.now.Store(time.Now())
 	var ctx context.Context
@@ -133,11 +137,12 @@ func (p *PoolWithFunc) goTicktock() {
 	go p.ticktock(ctx)
 }
 
+// 获取当前时间
 func (p *PoolWithFunc) nowTime() time.Time {
 	return p.now.Load().(time.Time)
 }
 
-// NewPoolWithFunc generates an instance of ants pool with a specific function.
+// 创建ants pool实例
 func NewPoolWithFunc(size int, pf func(interface{}), options ...Option) (*PoolWithFunc, error) {
 	if size <= 0 {
 		size = -1
@@ -147,8 +152,10 @@ func NewPoolWithFunc(size int, pf func(interface{}), options ...Option) (*PoolWi
 		return nil, ErrLackPoolFunc
 	}
 
+	// 加载options配置
 	opts := loadOptions(options...)
 
+	// 设置清理时间
 	if !opts.DisablePurge {
 		if expiry := opts.ExpiryDuration; expiry < 0 {
 			return nil, ErrInvalidPoolExpiry
@@ -157,33 +164,43 @@ func NewPoolWithFunc(size int, pf func(interface{}), options ...Option) (*PoolWi
 		}
 	}
 
+	// 设置Logger
 	if opts.Logger == nil {
 		opts.Logger = defaultLogger
 	}
 
+	// 创建pool实例（携带poolFunc）
 	p := &PoolWithFunc{
 		capacity: int32(size),
 		poolFunc: pf,
 		lock:     syncx.NewSpinLock(),
 		options:  opts,
 	}
+
+	// 创建worker实例
 	p.workerCache.New = func() interface{} {
 		return &goWorkerWithFunc{
 			pool: p,
 			args: make(chan interface{}, workerChanCap),
 		}
 	}
+
+	// 设置[]worker
 	if p.options.PreAlloc {
 		if size == -1 {
 			return nil, ErrInvalidPreAllocSize
 		}
+		// 创建queue类型的[]worker
 		p.workers = newWorkerArray(queueTypeLoopQueue, size)
 	} else {
+		// 创建stack类型的[]worker
 		p.workers = newWorkerArray(queueTypeStack, 0)
 	}
 
+	// 设置cond实例
 	p.cond = sync.NewCond(p.lock)
 
+	// 启动清理goroutine
 	p.goPurge()
 	p.goTicktock()
 

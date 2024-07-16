@@ -9,7 +9,7 @@ import (
 	syncx "github.com/panjf2000/ants/v2/internal/sync"
 )
 
-// 创建pool管理goroutine
+// pool结构
 type Pool struct {
 	// pool的容量，负数代表是无限容量，避免嵌套使用pool
 	capacity int32
@@ -20,7 +20,7 @@ type Pool struct {
 	// worker的锁
 	lock sync.Locker
 
-	// 存储可用worker的切片
+	// 存储可用worker
 	workers workerQueue
 
 	// 用于通知关闭pool
@@ -35,15 +35,18 @@ type Pool struct {
 	// pool.Submit()提交的阻塞的goroutine
 	waiting int32
 
-	// 清理的原子属性
+	// 定期清理worker
 	purgeDone int32
 	stopPurge context.CancelFunc
 
+	// 定期更新当前时间
 	ticktockDone int32
 	stopTicktock context.CancelFunc
 
+	// 记录执行时间
 	now atomic.Value
 
+	// options配置
 	options *Options
 }
 
@@ -144,7 +147,7 @@ func NewPool(size int, options ...Option) (*Pool, error) {
 		size = -1
 	}
 
-	// 加载options config
+	// 加载options配置
 	opts := loadOptions(options...)
 
 	// 设置清理时间
@@ -176,15 +179,15 @@ func NewPool(size int, options ...Option) (*Pool, error) {
 		}
 	}
 
-	// 设置workerArray
+	// 设置[]worker
 	if p.options.PreAlloc {
 		if size == -1 {
 			return nil, ErrInvalidPreAllocSize
 		}
-		// 创建queue类型的workerArray
+		// 创建queue类型的[]worker
 		p.workers = newWorkerArray(queueTypeLoopQueue, size)
 	} else {
-		// 创建stack类型的workerArray
+		// 创建stack类型的[]worker
 		p.workers = newWorkerArray(queueTypeStack, 0)
 	}
 
