@@ -1,25 +1,3 @@
-// MIT License
-
-// Copyright (c) 2018 Andy Pan
-
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package ants
 
 import (
@@ -27,28 +5,29 @@ import (
 	"time"
 )
 
-// goWorkerWithFunc is the actual executor who runs the tasks,
-// it starts a goroutine that accepts tasks and
-// performs function calls.
+// task的执行者，创建一个协程接收task并执行函数调用
 type goWorkerWithFunc struct {
-	// pool who owns this worker.
+	// worker pool
 	pool *PoolWithFunc
 
-	// args is a job should be done.
+	// 需要被完成的task
 	args chan interface{}
 
-	// lastUsed will be updated when putting a worker back into queue.
+	// 放回worker时，更新lastUsed时间
 	lastUsed time.Time
 }
 
-// run starts a goroutine to repeat the process
-// that performs the function calls.
+// 启动goroutine重复执行函数调用
 func (w *goWorkerWithFunc) run() {
+	// 添加一个running
 	w.pool.addRunning(1)
 	go func() {
 		defer func() {
+			// worker执行完成
 			w.pool.addRunning(-1)
+			// 返回worker到workerCache
 			w.pool.workerCache.Put(w)
+			// 发生panic，执行设定好的PanicHandler并记录日志
 			if p := recover(); p != nil {
 				if ph := w.pool.options.PanicHandler; ph != nil {
 					ph(p)
@@ -56,10 +35,11 @@ func (w *goWorkerWithFunc) run() {
 					w.pool.options.Logger.Printf("worker exits from panic: %v\n%s\n", p, debug.Stack())
 				}
 			}
-			// Call Signal() here in case there are goroutines waiting for available workers.
+			// 释放信号给waiting worker
 			w.pool.cond.Signal()
 		}()
 
+		// 重复执行task的函数调用
 		for args := range w.args {
 			if args == nil {
 				return
@@ -72,18 +52,22 @@ func (w *goWorkerWithFunc) run() {
 	}()
 }
 
+// 向task发出空信号
 func (w *goWorkerWithFunc) finish() {
 	w.args <- nil
 }
 
+// 返回lastUsed时间
 func (w *goWorkerWithFunc) lastUsedTime() time.Time {
 	return w.lastUsed
 }
 
+// 输入fn，执行panic
 func (w *goWorkerWithFunc) inputFunc(func()) {
 	panic("unreachable")
 }
 
+// 向args发送arg信号
 func (w *goWorkerWithFunc) inputParam(arg interface{}) {
 	w.args <- arg
 }

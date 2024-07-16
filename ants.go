@@ -1,25 +1,3 @@
-// MIT License
-
-// Copyright (c) 2018 Andy Pan
-
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package ants
 
 import (
@@ -32,96 +10,92 @@ import (
 )
 
 const (
-	// DefaultAntsPoolSize is the default capacity for a default goroutine pool.
+	// 协程池默认的容量大小
 	DefaultAntsPoolSize = math.MaxInt32
 
-	// DefaultCleanIntervalTime is the interval time to clean up goroutines.
+	// 清理协程的默认间隔时间
 	DefaultCleanIntervalTime = time.Second
 )
 
 const (
-	// OPENED represents that the pool is opened.
+	//　协程池打开标志位
 	OPENED = iota
 
-	// CLOSED represents that the pool is closed.
+	//　协程池关闭标志位
 	CLOSED
 )
 
 var (
-	// ErrLackPoolFunc will be returned when invokers don't provide function for pool.
+	// ErrLackPoolFunc：未提供池的函数
 	ErrLackPoolFunc = errors.New("must provide function for pool")
 
-	// ErrInvalidPoolExpiry will be returned when setting a negative number as the periodic duration to purge goroutines.
+	// ErrInvalidPoolExpiry：设置池清理时间为负数
 	ErrInvalidPoolExpiry = errors.New("invalid expiry for pool")
 
-	// ErrPoolClosed will be returned when submitting task to a closed pool.
+	// ErrPoolClosed：提交task到关闭的池会返回
 	ErrPoolClosed = errors.New("this pool has been closed")
 
-	// ErrPoolOverload will be returned when the pool is full and no workers available.
+	// ErrPoolOverload：当前池没有多余worker可用
 	ErrPoolOverload = errors.New("too many goroutines blocked on submit or Nonblocking is set")
 
-	// ErrInvalidPreAllocSize will be returned when trying to set up a negative capacity under PreAlloc mode.
+	// ErrInvalidPreAllocSize：在PreAlloc模式下，设置负容量
 	ErrInvalidPreAllocSize = errors.New("can not set up a negative capacity under PreAlloc mode")
 
-	// ErrTimeout will be returned after the operations timed out.
+	// ErrTimeout：执行超时
 	ErrTimeout = errors.New("operation timed out")
 
-	// workerChanCap determines whether the channel of a worker should be a buffered channel
-	// to get the best performance. Inspired by fasthttp at
-	// https://github.com/valyala/fasthttp/blob/master/workerpool.go#L139
+	// workerChanCap确定worker的通道是否应为缓冲通道，以获得最佳性能
 	workerChanCap = func() int {
-		// Use blocking channel if GOMAXPROCS=1.
-		// This switches context from sender to receiver immediately,
-		// which results in higher performance (under go1.5 at least).
+		// 如果GOMAXPROCS=1则使用阻塞channel，将context从sender转换为receiver
 		if runtime.GOMAXPROCS(0) == 1 {
 			return 0
 		}
 
-		// Use non-blocking workerChan if GOMAXPROCS>1,
-		// since otherwise the sender might be dragged down if the receiver is CPU-bound.
+		// GOMAXPROCS>1则使用非阻塞channel，因为如果sender是CPU密集型，receiver会来不及接收
 		return 1
 	}()
 
+	// 默认的Logger设置
 	defaultLogger = Logger(log.New(os.Stderr, "[ants]: ", log.LstdFlags|log.Lmsgprefix|log.Lmicroseconds))
 
-	// Init an instance pool when importing ants.
+	// import ants时，初始化一个ants pool
 	defaultAntsPool, _ = NewPool(DefaultAntsPoolSize)
 )
 
 const nowTimeUpdateInterval = 500 * time.Millisecond
 
-// Logger is used for logging formatted messages.
+// Logger接口
 type Logger interface {
-	// Printf must have the same semantics as log.Printf.
+	// 继承log接口
 	Printf(format string, args ...interface{})
 }
 
-// Submit submits a task to pool.
+// 提交task到pool
 func Submit(task func()) error {
 	return defaultAntsPool.Submit(task)
 }
 
-// Running returns the number of the currently running goroutines.
+// 当前正在运行的协程数
 func Running() int {
 	return defaultAntsPool.Running()
 }
 
-// Cap returns the capacity of this default pool.
+// 协程池的容量
 func Cap() int {
 	return defaultAntsPool.Cap()
 }
 
-// Free returns the available goroutines to work.
+// 可用的协程数量
 func Free() int {
 	return defaultAntsPool.Free()
 }
 
-// Release Closes the default pool.
+// 关闭协程池
 func Release() {
 	defaultAntsPool.Release()
 }
 
-// Reboot reboots the default pool.
+// 重启协程池
 func Reboot() {
 	defaultAntsPool.Reboot()
 }
