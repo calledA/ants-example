@@ -397,17 +397,19 @@ func (p *Pool) revertWorker(worker *goWorker) bool {
 	// 获取使用时间
 	worker.lastUsed = p.nowTime()
 
-	p.lock.Lock()
 	// 判断pool当前状态
+	p.lock.Lock()
 	if p.IsClosed() {
 		p.lock.Unlock()
 		return false
 	}
+
 	// 插入worker
 	if err := p.workers.insert(worker); err != nil {
 		p.lock.Unlock()
 		return false
 	}
+
 	// 成功返回worker，通知阻塞的worker
 	p.cond.Signal()
 	p.lock.Unlock()

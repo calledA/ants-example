@@ -209,29 +209,27 @@ func NewPoolWithFunc(size int, pf func(interface{}), options ...Option) (*PoolWi
 
 //---------------------------------------------------------------------------
 
-// Invoke submits a task to pool.
-//
-// Note that you are allowed to call Pool.Invoke() from the current Pool.Invoke(),
-// but what calls for special attention is that you will get blocked with the latest
-// Pool.Invoke() call once the current Pool runs out of its capacity, and to avoid this,
-// you should instantiate a PoolWithFunc with ants.WithNonblocking(true).
+// 提交task到pool
 func (p *PoolWithFunc) Invoke(args interface{}) error {
+	// pool是否关闭
 	if p.IsClosed() {
 		return ErrPoolClosed
 	}
+	// 获取worker执行
 	if w := p.retrieveWorker(); w != nil {
 		w.inputParam(args)
 		return nil
 	}
+	// pool满了，不进行操作返回
 	return ErrPoolOverload
 }
 
-// Running returns the number of workers currently running.
+// 返回running的worker数
 func (p *PoolWithFunc) Running() int {
 	return int(atomic.LoadInt32(&p.running))
 }
 
-// Free returns the number of available goroutines to work, -1 indicates this pool is unlimited.
+// 返回可以用的worker数，-1表示pool无限制
 func (p *PoolWithFunc) Free() int {
 	c := p.Cap()
 	if c < 0 {
@@ -240,24 +238,26 @@ func (p *PoolWithFunc) Free() int {
 	return c - p.Running()
 }
 
-// Waiting returns the number of tasks which are waiting be executed.
+// 等待执行的task数
 func (p *PoolWithFunc) Waiting() int {
 	return int(atomic.LoadInt32(&p.waiting))
 }
 
-// Cap returns the capacity of this pool.
+// 返回pool的容量
 func (p *PoolWithFunc) Cap() int {
 	return int(atomic.LoadInt32(&p.capacity))
 }
 
-// Tune changes the capacity of this pool, note that it is noneffective to the infinite or pre-allocation pool.
+// 修改pool的cap，对无限制或者预设的pool无效
 func (p *PoolWithFunc) Tune(size int) {
 	capacity := p.Cap()
 	if capacity == -1 || size <= 0 || size == capacity || p.options.PreAlloc {
 		return
 	}
+	// 设置cap
 	atomic.StoreInt32(&p.capacity, int32(size))
 	if size > capacity {
+		// 唤醒等待的worker
 		if size-capacity == 1 {
 			p.cond.Signal()
 			return
@@ -266,25 +266,25 @@ func (p *PoolWithFunc) Tune(size int) {
 	}
 }
 
-// IsClosed indicates whether the pool is closed.
+// 返回pool是否关闭
 func (p *PoolWithFunc) IsClosed() bool {
 	return atomic.LoadInt32(&p.state) == CLOSED
 }
 
-// Release closes this pool and releases the worker queue.
+// 关闭pool同时清空worker queue
 func (p *PoolWithFunc) Release() {
 	if !atomic.CompareAndSwapInt32(&p.state, OPENED, CLOSED) {
 		return
 	}
 	p.lock.Lock()
+	// 清空worker queue
 	p.workers.reset()
 	p.lock.Unlock()
-	// There might be some callers waiting in retrieveWorker(), so we need to wake them up to prevent
-	// those callers blocking infinitely.
+	// 唤醒等待的worker，避免一直等待
 	p.cond.Broadcast()
 }
 
-// ReleaseTimeout is like Release but with a timeout, it waits all workers to exit before timing out.
+// 在关闭pool之前，设置一个timeout，等待正在执行的worker
 func (p *PoolWithFunc) ReleaseTimeout(timeout time.Duration) error {
 	if p.IsClosed() || (!p.options.DisablePurge && p.stopPurge == nil) || p.stopTicktock == nil {
 		return ErrPoolClosed
@@ -298,6 +298,7 @@ func (p *PoolWithFunc) ReleaseTimeout(timeout time.Duration) error {
 	p.stopTicktock = nil
 	p.Release()
 
+	// 添加超时时间并等待所有任务完成
 	endTime := time.Now().Add(timeout)
 	for time.Now().Before(endTime) {
 		if p.Running() == 0 &&
@@ -310,7 +311,7 @@ func (p *PoolWithFunc) ReleaseTimeout(timeout time.Duration) error {
 	return ErrTimeout
 }
 
-// Reboot reboots a closed pool.
+// 重启关闭的pool
 func (p *PoolWithFunc) Reboot() {
 	if atomic.CompareAndSwapInt32(&p.state, CLOSED, OPENED) {
 		atomic.StoreInt32(&p.purgeDone, 0)
@@ -322,31 +323,33 @@ func (p *PoolWithFunc) Reboot() {
 
 //---------------------------------------------------------------------------
 
+// 添加running数
 func (p *PoolWithFunc) addRunning(delta int) {
 	atomic.AddInt32(&p.running, int32(delta))
 }
 
+// 添加waiting数
 func (p *PoolWithFunc) addWaiting(delta int) {
 	atomic.AddInt32(&p.waiting, int32(delta))
 }
 
-// retrieveWorker returns an available worker to run the tasks.
+// 返回一个可用的worker
 func (p *PoolWithFunc) retrieveWorker() (w worker) {
+	// 获取cache中worker的匿名函数
 	spawnWorker := func() {
 		w = p.workerCache.Get().(*goWorkerWithFunc)
 		w.run()
 	}
 
+	// 从worker queue获取worker
 	p.lock.Lock()
 	w = p.workers.detach()
-	if w != nil { // first try to fetch the worker from the queue
+	if w != nil { // 获取到worker之后解锁
 		p.lock.Unlock()
-	} else if capacity := p.Cap(); capacity == -1 || capacity > p.Running() {
-		// if the worker queue is empty and we don't run out of the pool capacity,
-		// then just spawn a new worker goroutine.
+	} else if capacity := p.Cap(); capacity == -1 || capacity > p.Running() { // 当前[]worker容量无限或者有剩余，则获取一个goroutine
 		p.lock.Unlock()
 		spawnWorker()
-	} else { // otherwise, we'll have to keep them blocked and wait for at least one worker to be put back into pool.
+	} else { // 没有剩余worker，如果不是Nonblocking模式，则保持阻塞状态，并尝试获取goroutine
 		if p.options.Nonblocking {
 			p.lock.Unlock()
 			return
@@ -357,17 +360,20 @@ func (p *PoolWithFunc) retrieveWorker() (w worker) {
 			return
 		}
 
+		// 添加waiting数并保持waiting状态
 		p.addWaiting(1)
-		p.cond.Wait() // block and wait for an available worker
+		p.cond.Wait()
 		p.addWaiting(-1)
 
+		// 判断pool状态
 		if p.IsClosed() {
 			p.lock.Unlock()
 			return
 		}
 
+		// 尝试获取goroutine
 		var nw int
-		if nw = p.Running(); nw == 0 { // awakened by the scavenger
+		if nw = p.Running(); nw == 0 {
 			p.lock.Unlock()
 			spawnWorker()
 			return
@@ -385,27 +391,31 @@ func (p *PoolWithFunc) retrieveWorker() (w worker) {
 	return
 }
 
-// revertWorker puts a worker back into free pool, recycling the goroutines.
+// 放回worker到pool
 func (p *PoolWithFunc) revertWorker(worker *goWorkerWithFunc) bool {
+	// 如果没有空间存放worker，返回false
 	if capacity := p.Cap(); (capacity > 0 && p.Running() > capacity) || p.IsClosed() {
 		p.cond.Broadcast()
 		return false
 	}
 
+	// 获取使用时间
 	worker.lastUsed = p.nowTime()
 
+	// 判断pool当前状态
 	p.lock.Lock()
-	// To avoid memory leaks, add a double check in the lock scope.
-	// Issue: https://github.com/panjf2000/ants/issues/113
 	if p.IsClosed() {
 		p.lock.Unlock()
 		return false
 	}
+
+	// 插入worker
 	if err := p.workers.insert(worker); err != nil {
 		p.lock.Unlock()
 		return false
 	}
-	// Notify the invoker stuck in 'retrieveWorker()' of there is an available worker in the worker queue.
+
+	// 成功返回worker，通知阻塞的worker
 	p.cond.Signal()
 	p.lock.Unlock()
 
